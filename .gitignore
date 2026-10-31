@@ -2,4 +2,4 @@ hangul_characters_250k/
 venv/
 data.pt
 model.pt
-__pycache
+__pycache__/

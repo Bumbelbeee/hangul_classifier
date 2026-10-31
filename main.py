@@ -10,6 +10,7 @@ from torch.utils.data import TensorDataset
 from preprocess import preprocess
 EPOCHS = 10
 class CNN(nn.Module):
+
     def __init__(self, num_classes):
         super().__init__()
         conv1 = nn.Conv2d(in_channels=1, out_channels=32,kernel_size=3, padding=1)
@@ -21,13 +22,14 @@ class CNN(nn.Module):
         relu = nn.ReLU()
         maxpool = nn.MaxPool2d(kernel_size=2)
         flatten = nn.Flatten()
+        dropout = nn.Dropout(0.5)
         fc = nn.Linear(8192, num_classes)
         
         self.layers = nn.Sequential(
             conv1, batchnorm1, relu, maxpool,
             conv2, batchnorm2, relu, maxpool, 
             conv3, batchnorm3, relu, maxpool, 
-            flatten, fc)
+            flatten, dropout, fc)
 
     def forward(self, x):
         return self.layers(x)
@@ -50,13 +52,7 @@ def main():
     test_loader = DataLoader(test_data, batch_size=64, num_workers= os.cpu_count() // 2, persistent_workers=True, pin_memory=True)
 
     # Test if the transformer is correct
-    """
-    1. The first try was very bad you cannot recognize the symbols the rezise may be to harsh I comment it out
-    2. Without the rezise it is much better but every pixel has large borders i might be able to strech it first into the borders and then rezise it
-    3. I Changed the Dataset now and created a box around everything that has pixels and then expanded it a couple of pixels to 64, 64
-    4. You can also see noise in these images but this might makes it even more robust
-    5. I optimized it further usung mutliple processes to load the data and training it on my graphics card
-    """
+
 
     model = CNN(len(classes))
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -115,7 +111,7 @@ def main():
 
     plt.tight_layout()
     os.makedirs("images", exist_ok=True)
-    fig.savefig("images/training.png")
+    fig.savefig("images/training_withdropout.png")
     plt.show()
 
 
