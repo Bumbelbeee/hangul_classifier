@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 from torch.utils.data import TensorDataset
 from preprocess import preprocess
-EPOCHS = 1
+EPOCHS = 10
 class CNN(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
@@ -68,6 +68,7 @@ def main():
     # TRAINING
     model.train()
     losses = []
+    evals = []
     for _ in range(EPOCHS):
         for step, (image, label) in enumerate(train_loader):
             image = image.to(device).float() / 255
@@ -84,8 +85,8 @@ def main():
             if step % 100 == 0:
                 print(loss.item())
                 losses.append(loss)
-        evaluate(model=model, loader=test_loader, device=device)
-
+        evals.append(evaluate(model=model, loader=test_loader, device=device))
+    torch.save(model.state_dict(), "model.pt")
 
 
 def evaluate(model, loader, device):
@@ -98,8 +99,9 @@ def evaluate(model, loader, device):
             prediction = model(image)
             prediction = prediction.argmax(dim=1)
             hits += (prediction == label).sum().item()
-
-    print(f"Evaluation: {hits / (len(loader.dataset))}")
+    eval = hits / (len(loader.dataset))
+    print(f"Evaluation: {eval}")
+    return eval
 
 if __name__ == "__main__":
     main()
