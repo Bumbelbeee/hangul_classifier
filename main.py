@@ -17,7 +17,7 @@ class CNN(nn.Module):
         self.relu = nn.ReLU()
         self.maxpool = nn.MaxPool2d(kernel_size=2)
         self.flatten = nn.Flatten()
-        self.fc = nn.Linear(10368, num_classes)
+        self.fc = nn.Linear(8192, num_classes)
 
 
         self.layers = [self.conv1, self.relu, self.maxpool, 
@@ -46,7 +46,8 @@ class HangulDataset(Dataset):
         sample = Image.open(os.path.join(self.path_data, self.data[index])).convert("L")
         bbox = sample.getbbox()
         crop = sample.crop(bbox)
-        sample = ImageOps.pad(crop, (74, 74))
+        sample = ImageOps.pad(crop, (56, 56))
+        sample = ImageOps.expand(sample, border=4)
         sample = self.transformer(sample)
 
 
@@ -63,7 +64,7 @@ def main():
 
     transform = v2.Compose([
     v2.ToImage(), # Transforms into a tensor
-    #v2.Resize((64,64)), # Resize the tensor from 255, 255 to 64, 64
+
     v2.ToDtype(torch.float32, scale=True), # Transforms the Tensor into scaled float32
     ])
 
@@ -78,8 +79,8 @@ def main():
     # Train Test Split
     train_data, test_data = random_split(dataset, [0.8, 0.2], generator=torch.Generator().manual_seed(42))
 
-    train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
-    test_loader = DataLoader(test_data, batch_size=64)
+    train_loader = DataLoader(train_data, batch_size=64, shuffle=True, num_workers= os.cpu_count() // 2, persistent_workers=True, pin_memory=True)
+    test_loader = DataLoader(test_data, batch_size=64, num_workers= os.cpu_count() // 2, persistent_workers=True, pin_memory=True)
 
     # Test if the transformer is correct
     """
@@ -87,6 +88,7 @@ def main():
     2. Without the rezise it is much better but every pixel has large borders i might be able to strech it first into the borders and then rezise it
     3. I Changed the Dataset now and created a box around everything that has pixels and then expanded it a couple of pixels to 64, 64
     4. You can also see noise in these images but this might makes it even more robust
+    5. I optimized it further usung mutliple processes to load the data and training it on my graphics card
     """
 
     model = CNN(len(classes))
@@ -101,6 +103,8 @@ def main():
 
     for _ in range(EPOCHS):
         for step, (image, label) in enumerate(train_loader):
+            image = image.to(device)
+            label = label.to(device)
             # Predict the Label based on image
             prediction = model(image)
             # Calculate error
