@@ -6,77 +6,44 @@ from torchvision.transforms import v2
 from torch.utils.data import Dataset, DataLoader, random_split
 import matplotlib.pyplot as plt
 import torch.nn as nn
-
+from torch.utils.data import TensorDataset
+from preprocess import preprocess
 EPOCHS = 1
 class CNN(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=32,kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64,kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128,kernel_size=3, padding=1)
-        self.relu = nn.ReLU()
-        self.maxpool = nn.MaxPool2d(kernel_size=2)
-        self.flatten = nn.Flatten()
-        self.fc = nn.Linear(8192, num_classes)
-
-
-        self.layers = [self.conv1, self.relu, self.maxpool, 
-                       self.conv2, self.relu, self.maxpool, 
-                       self.conv3, self.relu, self.maxpool, 
-                       self.flatten, self.fc]      
+        conv1 = nn.Conv2d(in_channels=1, out_channels=32,kernel_size=3, padding=1)
+        conv2 = nn.Conv2d(in_channels=32, out_channels=64,kernel_size=3, padding=1)
+        conv3 = nn.Conv2d(in_channels=64, out_channels=128,kernel_size=3, padding=1)
+        batchnorm1 = nn.BatchNorm2d(num_features=32)
+        batchnorm2 = nn.BatchNorm2d(num_features=64)
+        batchnorm3 = nn.BatchNorm2d(num_features=128)
+        relu = nn.ReLU()
+        maxpool = nn.MaxPool2d(kernel_size=2)
+        flatten = nn.Flatten()
+        fc = nn.Linear(8192, num_classes)
+        
+        self.layers = nn.Sequential(
+            conv1, batchnorm1, relu, maxpool,
+            conv2, batchnorm2, relu, maxpool, 
+            conv3, batchnorm3, relu, maxpool, 
+            flatten, fc)
 
     def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-
-        return x
+        return self.layers(x)
         
-class HangulDataset(Dataset):
-    def __init__(self, data, labels, path_data, transformer, maping):
-        self.data = data
-        self.labels = labels
-        self.path_data = path_data
-        self.transformer = transformer
-        self.maping = maping
 
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, index):
-        sample = Image.open(os.path.join(self.path_data, self.data[index])).convert("L")
-        bbox = sample.getbbox()
-        crop = sample.crop(bbox)
-        sample = ImageOps.pad(crop, (56, 56))
-        sample = ImageOps.expand(sample, border=4)
-        sample = self.transformer(sample)
-
-
-        label = self.maping[self.labels[index]]
-        return sample, label
         
 
 def main():
-    # Current Dir
-    cwd = os.getcwd()
-    path = os.path.join(cwd, "hangul_characters_250k")
-    path_data = os.path.join(path, "labels-map.csv")
-    data = pd.read_csv(path_data, header=None, names=["path", "symbol"])
-
-    transform = v2.Compose([
-    v2.ToImage(), # Transforms into a tensor
-
-    v2.ToDtype(torch.float32, scale=True), # Transforms the Tensor into scaled float32
-    ])
-
-    # Label Mapping
-    classes = sorted(data["symbol"].unique())
-
-    label_maping = {symbol: idx for idx, symbol in enumerate(classes)}
-
-
-    dataset = HangulDataset(data["path"], data["symbol"], path, transform, label_maping)
-
+    if not(os.path.exists("data.pt")):
+        preprocess()
+    
+    data = torch.load("data.pt")
+    classes = data["classes"]
+    dataset = TensorDataset(data["images"], data["labels"])
     # Train Test Split
+
     train_data, test_data = random_split(dataset, [0.8, 0.2], generator=torch.Generator().manual_seed(42))
 
     train_loader = DataLoader(train_data, batch_size=64, shuffle=True, num_workers= os.cpu_count() // 2, persistent_workers=True, pin_memory=True)
@@ -98,12 +65,12 @@ def main():
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-    
+    # TRAINING
     model.train()
-
+    losses = []
     for _ in range(EPOCHS):
         for step, (image, label) in enumerate(train_loader):
-            image = image.to(device)
+            image = image.to(device).float() / 255
             label = label.to(device)
             # Predict the Label based on image
             prediction = model(image)
@@ -116,8 +83,23 @@ def main():
             optimizer.step()
             if step % 100 == 0:
                 print(loss.item())
+                losses.append(loss)
+        evaluate(model=model, loader=test_loader, device=device)
 
 
+
+def evaluate(model, loader, device):
+    model.eval()
+    hits = 0
+    with torch.no_grad():
+        for image, label in loader:
+            image = image.to(device).float() / 32
+            label = label.to(device)
+            prediction = model(image)
+            prediction = prediction.argmax(dim=1)
+            hits += (prediction == label).sum().item()
+
+    print(f"Evaluation: {hits / (len(loader.dataset))}")
 
 if __name__ == "__main__":
     main()
