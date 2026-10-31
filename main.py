@@ -66,10 +66,13 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     # TRAINING
-    model.train()
+    
     losses = []
+    test_losses = []
     evals = []
     for _ in range(EPOCHS):
+        model.train()
+        epoch_loss = 0
         for step, (image, label) in enumerate(train_loader):
             image = image.to(device).float() / 255
             label = label.to(device)
@@ -82,26 +85,56 @@ def main():
             # Calculate Gradient
             loss.backward()
             optimizer.step()
+            epoch_loss += loss.item()
             if step % 100 == 0:
                 print(loss.item())
-                losses.append(loss)
-        evals.append(evaluate(model=model, loader=test_loader, device=device))
+
+
+        losses.append(epoch_loss / len(train_loader))
+        acc, test_loss = evaluate(model=model, loader=test_loader, device=device, loss_fn=loss_fn)
+        evals.append(acc)
+        test_losses.append(test_loss)
+
     torch.save(model.state_dict(), "model.pt")
 
+    # Visualisiations
 
-def evaluate(model, loader, device):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    axes[0].plot(losses, label="Train")
+    axes[0].plot(test_losses, label="Test")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Loss")
+    axes[0].set_title("Loss")
+    axes[0].legend()
+
+
+    axes[1].plot(evals)
+    axes[1].set_xlabel("Epoch")
+    axes[1].set_title("Test Accuracy")
+    axes[1].set_ylabel("Accuracy")
+
+    plt.tight_layout()
+    os.makedirs("images", exist_ok=True)
+    fig.savefig("images/training.png")
+    plt.show()
+
+
+def evaluate(model, loader, device, loss_fn):
     model.eval()
     hits = 0
+    loss = 0
     with torch.no_grad():
         for image, label in loader:
-            image = image.to(device).float() / 32
+            image = image.to(device).float() / 255
             label = label.to(device)
             prediction = model(image)
+            loss += loss_fn(prediction, label).item()
             prediction = prediction.argmax(dim=1)
             hits += (prediction == label).sum().item()
+    loss = loss/len(loader)
     eval = hits / (len(loader.dataset))
     print(f"Evaluation: {eval}")
-    return eval
+    return eval, loss
 
 if __name__ == "__main__":
     main()
