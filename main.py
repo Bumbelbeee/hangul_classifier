@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 from torch.utils.data import TensorDataset
 from preprocess import preprocess
-EPOCHS = 10
+EPOCHS = 40
 class CNN(nn.Module):
 
     def __init__(self, num_classes):
@@ -46,11 +46,11 @@ def main():
     dataset = TensorDataset(data["images"], data["labels"])
     # Train Test Split
 
-    train_data, test_data = random_split(dataset, [0.8, 0.2], generator=torch.Generator().manual_seed(42))
+    train_data, validation_data, test_data = random_split(dataset, [0.8, 0.1, 0.1], generator=torch.Generator().manual_seed(42))
 
     train_loader = DataLoader(train_data, batch_size=64, shuffle=True, num_workers= os.cpu_count() // 2, persistent_workers=True, pin_memory=True)
     test_loader = DataLoader(test_data, batch_size=64, num_workers= os.cpu_count() // 2, persistent_workers=True, pin_memory=True)
-
+    validation_loader = DataLoader(validation_data, batch_size=64, num_workers= os.cpu_count() // 2, persistent_workers=True, pin_memory=True)
     # Test if the transformer is correct
 
 
@@ -66,7 +66,7 @@ def main():
     losses = []
     test_losses = []
     evals = []
-    for _ in range(EPOCHS):
+    for i in range(EPOCHS):
         model.train()
         epoch_loss = 0
         for step, (image, label) in enumerate(train_loader):
@@ -82,22 +82,30 @@ def main():
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-            if step % 100 == 0:
-                print(loss.item())
+            #äif step % 100 == 0:
+                #print(loss.item())
 
 
         losses.append(epoch_loss / len(train_loader))
-        acc, test_loss = evaluate(model=model, loader=test_loader, device=device, loss_fn=loss_fn)
+        acc, test_loss = evaluate(model=model, loader=validation_loader, device=device, loss_fn=loss_fn)
+        if (i == 0):
+            torch.save(model.state_dict(), "model.pt")
+        elif(test_loss < min(test_losses)):
+            torch.save(model.state_dict(), "model.pt")
         evals.append(acc)
         test_losses.append(test_loss)
-
-    torch.save(model.state_dict(), "model.pt")
+        if(i > 2):
+            if((test_losses[-4] - test_losses[-1]) < 0.001):
+                break
+        
+    model.load_state_dict(torch.load("model.pt"))
+    acc, test_loss = evaluate(model=model, loader=test_loader, device=device, loss_fn=loss_fn)
 
     # Visualisiations
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     axes[0].plot(losses, label="Train")
-    axes[0].plot(test_losses, label="Test")
+    axes[0].plot(test_losses, label="Validation")
     axes[0].set_xlabel("Epoch")
     axes[0].set_ylabel("Loss")
     axes[0].set_title("Loss")
@@ -106,12 +114,12 @@ def main():
 
     axes[1].plot(evals)
     axes[1].set_xlabel("Epoch")
-    axes[1].set_title("Test Accuracy")
+    axes[1].set_title("Validation Accuracy")
     axes[1].set_ylabel("Accuracy")
 
     plt.tight_layout()
     os.makedirs("images", exist_ok=True)
-    fig.savefig("images/training_withdropout.png")
+    fig.savefig("images/training_earlystopping.png")
     plt.show()
 
 
