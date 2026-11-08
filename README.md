@@ -1,6 +1,6 @@
 # Hangul Character Classification
 
-A convolutional neural network in PyTorch that recognizes **2,350 Korean Hangul syllables** from single-character images. Trained on ~260,000 images, it reaches **~93.7% test accuracy**.
+A convolutional neural network in PyTorch that recognizes **2,350 Korean Hangul syllables** from single-character images. Trained on ~260,000 images, it reaches **~92.9% test accuracy** on a held-out test set that was used only once.
 
 I built this as a learning project to understand the full deep learning workflow: loading and preprocessing image data, building a CNN, training on a GPU and evaluating honestly.
 
@@ -13,6 +13,8 @@ I built this as a learning project to understand the full deep learning workflow
 
 Random guessing would be 1 / 2,350 ≈ 0.04%.
 
+These first two numbers come from an earlier 80/20 train/test split where I also used the test set to compare models, so they are slightly too optimistic. The final model below fixes that.
+
 **Without dropout**: the training loss drops to almost 0 while the test loss starts rising again after epoch 6, so the model is memorizing the training data (overfitting).
 
 ![Training without dropout](images/training.png)
@@ -21,11 +23,23 @@ Random guessing would be 1 / 2,350 ≈ 0.04%.
 
 ![Training with dropout](images/training_withdropout.png)
 
+### Final model: validation set and early stopping
+
+The data is now split 80% training / 10% validation / 10% test. After every epoch the model is evaluated on the validation set:
+
+- The model with the **lowest validation loss** so far is saved to `model.pt`.
+- Training **stops early** when the validation loss is not at least 0.001 lower than three epochs before.
+- At the end, the best saved model is loaded and evaluated **once** on the test set.
+
+Training stopped after 11 epochs because the validation loss started rising again, while the training loss kept falling. The best validation accuracy was ~93.3%; the final **test accuracy is ~92.9%**. That it is slightly lower than the validation accuracy is expected: the model was picked on the validation set, so only the test set gives an unbiased number.
+
+![Training with validation set and early stopping](images/training_earlystopping.png)
+
 ## Dataset
 
 [Hangul Characters 250k](https://www.kaggle.com/datasets/henryshippole/hangul-characters-250k) (Kaggle): 260,850 labeled images of 2,350 Hangul syllables, a mix of handwritten and printed characters. Labels come from `labels-map.csv` (image path → character).
 
-Split: 80% training / 20% test (`random_split` with a fixed seed).
+Split: 80% training / 10% validation / 10% test (`random_split` with a fixed seed).
 
 ## Preprocessing
 
@@ -59,7 +73,7 @@ Input 1×64×64
 - **Dropout**: randomly switches off half of these values during training so the network can't rely on single features.
 - **Linear**: combines all features into one score per character. The highest score is the prediction.
 
-Training: Adam (lr = 0.001), cross-entropy loss, batch size 64, 10 epochs, on an NVIDIA GPU with CUDA.
+Training: Adam (lr = 0.001), cross-entropy loss, batch size 64, up to 40 epochs with early stopping on the validation loss, on an NVIDIA GPU with CUDA.
 
 ## What I learned
 
@@ -67,7 +81,7 @@ Training: Adam (lr = 0.001), cross-entropy loss, batch size 64, 10 epochs, on an
 - **Preprocessing matters as much as the model.** Cropping to the character and keeping the aspect ratio made the images clearly readable at 64×64.
 - **Most training time was data loading, not the model.** Moving training to the GPU, loading with multiple workers and preprocessing everything once into a tensor file made training many times faster.
 - **Overfitting is visible in the loss curves.** When the training loss keeps falling but the test loss goes up, more epochs don't help. Dropout reduced this noticeably.
-- **Train / validation / test.** I compared models and picked settings using the test set. Properly, decisions should be made on a separate validation set, and the test set used only once at the end, otherwise the reported accuracy is slightly too optimistic.
+- **Train / validation / test.** At first I compared models and picked settings using the test set, which made the reported accuracy slightly too optimistic (93.7%). Now every decision (best epoch, when to stop) is made on a separate validation set, and the test set is used only once at the end (92.9%).
 
 ## How to run
 
@@ -84,11 +98,10 @@ Download the dataset from Kaggle and place it in `hangul_characters_250k/` (with
 python main.py
 ```
 
-On the first run, `preprocess.py` creates `data.pt`. The trained model is saved as `model.pt` and the training curves in `images/`.
+On the first run, `preprocess.py` creates `data.pt`. The best model (lowest validation loss) is saved as `model.pt` and the training curves in `images/`.
 
 ## Next steps
 
-- Separate validation set and keep the best epoch (early stopping)
 - Data augmentation (small rotations and shifts)
 - Error analysis: which characters get confused most?
 - Test on my own handwriting
