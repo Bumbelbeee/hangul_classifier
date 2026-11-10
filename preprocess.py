@@ -20,7 +20,8 @@ class HangulDataset(Dataset):
         sample = Image.open(os.path.join(self.path_data, self.data[index])).convert("L")
         bbox = sample.getbbox()
         crop = sample.crop(bbox)
-        sample = ImageOps.pad(crop, (56, 56))
+        #sample = ImageOps.pad(crop, (56, 56)) 64 x 64 Pixel
+        sample = ImageOps.pad(crop, (120, 120))
         sample = ImageOps.expand(sample, border=4)
         sample = self.transformer(sample)
 

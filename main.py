@@ -16,19 +16,24 @@ class CNN(nn.Module):
         conv1 = nn.Conv2d(in_channels=1, out_channels=32,kernel_size=3, padding=1)
         conv2 = nn.Conv2d(in_channels=32, out_channels=64,kernel_size=3, padding=1)
         conv3 = nn.Conv2d(in_channels=64, out_channels=128,kernel_size=3, padding=1)
+        conv4 = nn.Conv2d(in_channels=128, out_channels=256,kernel_size=3, padding=1)
         batchnorm1 = nn.BatchNorm2d(num_features=32)
         batchnorm2 = nn.BatchNorm2d(num_features=64)
         batchnorm3 = nn.BatchNorm2d(num_features=128)
+        batchnorm4 = nn.BatchNorm2d(num_features=256)
         relu = nn.ReLU()
         maxpool = nn.MaxPool2d(kernel_size=2)
         flatten = nn.Flatten()
         dropout = nn.Dropout(0.5)
-        fc = nn.Linear(8192, num_classes)
+        #fc = nn.Linear(8192, num_classes) with 64 x 64
+        fc = nn.Linear(16384, num_classes) # 128 × 16 × 16
+
         
         self.layers = nn.Sequential(
             conv1, batchnorm1, relu, maxpool,
             conv2, batchnorm2, relu, maxpool, 
             conv3, batchnorm3, relu, maxpool, 
+            conv4, batchnorm4, relu, maxpool,
             flatten, dropout, fc)
 
     def forward(self, x):
@@ -39,6 +44,7 @@ class CNN(nn.Module):
 
 def main():
     if not(os.path.exists("data.pt")):
+        print("Preprocessing")
         preprocess()
     
     data = torch.load("data.pt")
@@ -119,7 +125,7 @@ def main():
 
     plt.tight_layout()
     os.makedirs("images", exist_ok=True)
-    fig.savefig("images/training_earlystopping.png")
+    fig.savefig("images/training_earlystopping_2.png")
     plt.show()
 
 
